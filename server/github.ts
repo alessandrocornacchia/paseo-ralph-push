@@ -132,7 +132,22 @@ interface GhUser {
   login: string;
 }
 
-/** Reviews and comments on the branch's open PR posted at or after `since`. */
+interface GhComment {
+  user: GhUser;
+  body: string;
+  html_url: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+const lastEdit = (c: GhComment) => c.updated_at ?? c.created_at;
+
+/**
+ * Reviews and comments on the branch's open PR posted or edited at or after `since`.
+ *
+ * Comments count from their last edit, as GitHub's `since` filter does, so a bot that
+ * updates one comment per CI run (for example a review summary) is included.
+ */
 export async function fetchReviewNotes(
   cwd: string,
   repo: string,
@@ -143,19 +158,19 @@ export async function fetchReviewNotes(
   const [reviews, comments, inline] = await Promise.all([
     ghJson<{ user: GhUser; state: string; body: string; html_url: string; submitted_at: string }[][]>(
       cwd, "api", "--paginate", "--slurp", `${base}/pulls/${prNumber}/reviews?per_page=100`),
-    ghJson<{ user: GhUser; body: string; html_url: string; created_at: string }[][]>(
+    ghJson<GhComment[][]>(
       cwd, "api", "--paginate", "--slurp", `${base}/issues/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
-    ghJson<{ user: GhUser; body: string; html_url: string; created_at: string; path: string }[][]>(
+    ghJson<(GhComment & { path: string })[][]>(
       cwd, "api", "--paginate", "--slurp", `${base}/pulls/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
   ]);
   const after = (at: string | null | undefined) => !!at && new Date(at) >= since;
   const notes: ReviewNote[] = [
     ...reviews.flat().filter((r) => after(r.submitted_at) && (r.body || r.state === "CHANGES_REQUESTED"))
       .map((r) => ({ author: r.user.login, kind: "review" as const, state: r.state, body: r.body, url: r.html_url, at: r.submitted_at })),
-    ...comments.flat().filter((c) => after(c.created_at))
-      .map((c) => ({ author: c.user.login, kind: "comment" as const, body: c.body, url: c.html_url, at: c.created_at })),
-    ...inline.flat().filter((c) => after(c.created_at))
-      .map((c) => ({ author: c.user.login, kind: "inline" as const, path: c.path, body: c.body, url: c.html_url, at: c.created_at })),
+    ...comments.flat().filter((c) => after(lastEdit(c)))
+      .map((c) => ({ author: c.user.login, kind: "comment" as const, body: c.body, url: c.html_url, at: lastEdit(c) })),
+    ...inline.flat().filter((c) => after(lastEdit(c)))
+      .map((c) => ({ author: c.user.login, kind: "inline" as const, path: c.path, body: c.body, url: c.html_url, at: lastEdit(c) })),
   ];
   return notes.sort((a, b) => a.at.localeCompare(b.at));
 }
