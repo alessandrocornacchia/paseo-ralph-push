@@ -12,7 +12,8 @@ function respond(byPath: Record<string, unknown[]>) {
   exec.mockImplementation(async (_cmd: string, args: string[] = []) => {
     const path = args.find((arg) => arg.startsWith("repos/")) ?? "";
     const key = Object.keys(byPath).find((suffix) => path.includes(suffix));
-    return { stdout: JSON.stringify([key ? byPath[key] : []]) };
+    // `gh api --paginate --jq '.[]'` prints one compact JSON item per line.
+    return { stdout: (key ? byPath[key] : []).map((item) => JSON.stringify(item)).join("\n") };
   });
 }
 
