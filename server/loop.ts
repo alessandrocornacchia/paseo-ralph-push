@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { PaseoApi } from "@getpaseo/client";
-import type { PluginTurnOutcome } from "@getpaseo/plugin/server";
+import type { PluginHandlerContext, PluginTurnOutcome } from "@getpaseo/plugin/server";
 import {
   type PushFixConfig,
   type PushFixOverrides,
@@ -27,6 +26,8 @@ import {
   matchesAny,
   tail,
 } from "./github";
+
+type PaseoApi = PluginHandlerContext["paseo"];
 
 const LOG_CHARS_PER_CHECK = 6_000;
 const SUMMARY_CHARS_PER_CHECK = 3_000;
