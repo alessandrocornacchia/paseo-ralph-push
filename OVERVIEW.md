@@ -9,7 +9,7 @@ Start a run with the **Push (Ralph)** button in the workspace header. With one a
 1. Optionally sends your pre-push instructions to the agent (for example "run the tests and lint, commit") and waits for that turn to end.
 2. Runs `git push` in the agent's working directory. It never force-pushes.
 3. Polls the GitHub check runs and commit statuses of the pushed commit with `gh`.
-4. When every watched check has finished: if all passed, the run ends. If any failed, it sends the agent the check summaries, the failed-step logs of GitHub Actions jobs, and (optionally) PR reviews and comments posted since the push, then waits for the agent's turn to end and starts the next round.
+4. When every watched check has finished: if all passed, the run ends. If any failed, it sends the agent the check summaries, the failed-step logs of GitHub Actions jobs, and (optionally) PR reviews posted since the push and comments posted or edited since then, such as a bot summary it updates on every run, then waits for the agent's turn to end and starts the next round.
 
 A status row in the agent's timeline shows the branch, commit, round, and each watched check. The loop stops when the agent ends a fix turn without a new commit, when a turn is canceled, when checks time out, or with `/push-fix-stop` or Stop on the composer pill.
 
