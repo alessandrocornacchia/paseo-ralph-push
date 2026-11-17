@@ -93,7 +93,8 @@ function fakeRepo() {
     }
     if (line.startsWith("gh repo view")) return out("me/repo");
     const runs = line.match(/commits\/(\w+)\/check-runs/);
-    if (runs) return out([{ check_runs: state.checks.get(runs[1]) ?? [] }]);
+    // `gh api --paginate --jq '.check_runs[]'` prints one compact JSON item per line.
+    if (runs) return out((state.checks.get(runs[1]) ?? []).map((r) => JSON.stringify(r)).join("\n"));
     if (/commits\/\w+\/status/.test(line)) return out({ statuses: [] });
     if (line.startsWith("gh run view")) return out("job\tbuild\t2026-01-01T00:00:00Z error: boom");
     if (line.startsWith("gh pr list")) return out([]);

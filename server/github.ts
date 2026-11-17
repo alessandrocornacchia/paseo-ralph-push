@@ -18,6 +18,16 @@ export const git = (cwd: string, ...args: string[]) => run("git", args, cwd);
 export const gh = (cwd: string, ...args: string[]) => run("gh", args, cwd);
 export const ghJson = async <T>(cwd: string, ...args: string[]): Promise<T> => JSON.parse(await gh(cwd, ...args)) as T;
 
+/**
+ * Every item of a paginated list endpoint. `select` is the jq path to the items in one
+ * page (`.[]`, `.check_runs[]`). `--jq` prints one compact JSON item per line; this
+ * avoids `--slurp`, which needs gh 2.48 or newer.
+ */
+export async function ghList<T>(cwd: string, path: string, select = ".[]"): Promise<T[]> {
+  const out = await gh(cwd, "api", "--paginate", "--jq", select, path);
+  return out.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as T);
+}
+
 export interface Check {
   name: string;
   state: CheckState;
@@ -48,13 +58,7 @@ interface CommitStatus {
 /** All check runs and commit statuses for `sha`, latest attempt per name. */
 export async function fetchChecks(cwd: string, repo: string, sha: string): Promise<Check[]> {
   const [runs, statuses] = await Promise.all([
-    ghJson<{ check_runs: CheckRun[] }[]>(
-      cwd,
-      "api",
-      "--paginate",
-      "--slurp",
-      `repos/${repo}/commits/${sha}/check-runs?per_page=100`,
-    ),
+    ghList<CheckRun>(cwd, `repos/${repo}/commits/${sha}/check-runs?per_page=100`, ".check_runs[]"),
     ghJson<{ statuses: CommitStatus[] }>(cwd, "api", `repos/${repo}/commits/${sha}/status?per_page=100`),
   ]);
 
@@ -64,7 +68,7 @@ export async function fetchChecks(cwd: string, repo: string, sha: string): Promi
     if (!prev || prev.id < id) byName.set(check.name, { id, check });
   };
 
-  for (const r of runs.flatMap((page) => page.check_runs)) {
+  for (const r of runs) {
     keep(r.id, {
       name: r.name,
       state: checkRunState(r),
@@ -156,20 +160,18 @@ export async function fetchReviewNotes(
 ): Promise<ReviewNote[]> {
   const base = `repos/${repo}`;
   const [reviews, comments, inline] = await Promise.all([
-    ghJson<{ user: GhUser; state: string; body: string; html_url: string; submitted_at: string }[][]>(
-      cwd, "api", "--paginate", "--slurp", `${base}/pulls/${prNumber}/reviews?per_page=100`),
-    ghJson<GhComment[][]>(
-      cwd, "api", "--paginate", "--slurp", `${base}/issues/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
-    ghJson<(GhComment & { path: string })[][]>(
-      cwd, "api", "--paginate", "--slurp", `${base}/pulls/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
+    ghList<{ user: GhUser; state: string; body: string; html_url: string; submitted_at: string }>(
+      cwd, `${base}/pulls/${prNumber}/reviews?per_page=100`),
+    ghList<GhComment>(cwd, `${base}/issues/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
+    ghList<GhComment & { path: string }>(cwd, `${base}/pulls/${prNumber}/comments?per_page=100&since=${since.toISOString()}`),
   ]);
   const after = (at: string | null | undefined) => !!at && new Date(at) >= since;
   const notes: ReviewNote[] = [
-    ...reviews.flat().filter((r) => after(r.submitted_at) && (r.body || r.state === "CHANGES_REQUESTED"))
+    ...reviews.filter((r) => after(r.submitted_at) && (r.body || r.state === "CHANGES_REQUESTED"))
       .map((r) => ({ author: r.user.login, kind: "review" as const, state: r.state, body: r.body, url: r.html_url, at: r.submitted_at })),
-    ...comments.flat().filter((c) => after(lastEdit(c)))
+    ...comments.filter((c) => after(lastEdit(c)))
       .map((c) => ({ author: c.user.login, kind: "comment" as const, body: c.body, url: c.html_url, at: lastEdit(c) })),
-    ...inline.flat().filter((c) => after(lastEdit(c)))
+    ...inline.filter((c) => after(lastEdit(c)))
       .map((c) => ({ author: c.user.login, kind: "inline" as const, path: c.path, body: c.body, url: c.html_url, at: lastEdit(c) })),
   ];
   return notes.sort((a, b) => a.at.localeCompare(b.at));
