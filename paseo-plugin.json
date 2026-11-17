@@ -1,0 +1,9 @@
+{
+  "id": "paseo-ralph-push",
+  "name": "Push & fix",
+  "description": "Push, watch the CI checks you choose, and send failures back to the agent until green or a round cap",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.15.0"
+  }
+}
